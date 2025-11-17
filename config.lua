@@ -152,11 +152,11 @@ Config.DEFAULT_PLUGIN_REPOS = {
         repo = "webbrowser.koplugin",
         description = "Web Browser plugin",
     },
-    {
-        owner = "Billiam",
-        repo = "hardcoverapp.koplugin",
-        description = "Hardcover App plugin",
-    },
+    -- {
+    --     owner = "Billiam",
+    --     repo = "hardcoverapp.koplugin",
+    --     description = "Hardcover App plugin",
+    -- },
     {
         owner = "omer-faruq",
         repo = "assistant.koplugin",
@@ -177,11 +177,11 @@ Config.DEFAULT_PLUGIN_REPOS = {
         repo = "TelegramDownloader.koplugin",
         description = "Telegram Downloader plugin",
     },
-    {
-        owner = "joshuacant",
-        repo = "ProjectTitle",
-        description = "Project Title plugin",
-    },
+    -- {
+    --     owner = "joshuacant",
+    --     repo = "ProjectTitle",
+    --     description = "Project Title plugin",
+    -- },
     {
         owner = "JoeBumm",
         repo = "Koreader-Menu-customizer",

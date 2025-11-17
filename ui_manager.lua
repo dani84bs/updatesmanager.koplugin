@@ -10,6 +10,9 @@ local ConfirmBox = require("ui/widget/confirmbox")
 local InputDialog = require("ui/widget/inputdialog")
 local Geom = require("ui/geometry")
 local InfoMessage = require("ui/widget/infomessage")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
+local IconButton = require("ui/widget/iconbutton")
 local LineWidget = require("ui/widget/linewidget")
 local Menu = require("ui/widget/menu")
 local Size = require("ui/size")
@@ -17,6 +20,7 @@ local Font = require("ui/font")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
+local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local Screen = require("device").screen
 local NetworkMgr = require("ui/network/manager")
@@ -25,6 +29,162 @@ local T = require("ffi/util").template
 local logger = require("logger")
 
 local UIManager_Updates = {}
+
+local function sanitizeMarkdownLine(line)
+    if not line then
+        return ""
+    end
+    local sanitized = line
+    sanitized = sanitized:gsub("%[([^%]]+)%]%([^%)]+)", "%1") -- inline links
+    sanitized = sanitized:gsub("!%[([^%]]*)%]%([^%)]+)", "%1") -- images
+    sanitized = sanitized:gsub("%[([^%]]+)%]%[[^%]]+%]", "%1") -- reference links
+    sanitized = sanitized:gsub("`([^`]+)`", "%1") -- inline code
+    sanitized = sanitized:gsub("%*%*([^%*]+)%*%*", "%1") -- bold markers
+    sanitized = sanitized:gsub("__([^_]+)__", "%1")
+    return sanitized
+end
+
+function UIManager_Updates:_markdownToPlainText(markdown)
+    if not markdown or markdown:match("^%s*$") then
+        return nil
+    end
+
+    local lines = {}
+    local needs_ptf = false
+    local cleaned = markdown:gsub("\r\n", "\n"):gsub("\r", "\n")
+    cleaned = cleaned:gsub("<br%s*/?>", "\n")
+
+    for line in (cleaned .. "\n"):gmatch("(.-)\n") do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        if trimmed == "" then
+            table.insert(lines, "")
+        else
+            local lower_line = trimmed:lower()
+            if lower_line:match("^full%s+changelog") or lower_line:match("^see%s+full%s+changelog") then
+                goto continue
+            end
+            local processed = sanitizeMarkdownLine(trimmed)
+            local heading_prefix, heading_text = processed:match("^(#+)%s*(.+)$")
+            if heading_prefix then
+                needs_ptf = true
+                table.insert(lines, TextBoxWidget.PTF_BOLD_START .. heading_text .. TextBoxWidget.PTF_BOLD_END)
+            else
+                local list_item = processed:match("^[-*+]%s+(.+)$")
+                if list_item then
+                    table.insert(lines, "• " .. list_item)
+                else
+                    local number, content = processed:match("^(%d+)%.%s+(.+)$")
+                    if number then
+                        table.insert(lines, number .. ". " .. content)
+                    else
+                        table.insert(lines, processed)
+                    end
+                end
+            end
+        end
+        ::continue::
+    end
+
+    local text = table.concat(lines, "\n")
+    if needs_ptf then
+        text = TextBoxWidget.PTF_HEADER .. text
+    end
+    return text
+end
+
+function UIManager_Updates:_createChangelogWidget(markdown)
+    local text = self:_markdownToPlainText(markdown) or _("No changelog available for this version.")
+    local width = math.floor(math.min(Screen:getWidth(), Screen:getHeight()) * 0.9) - 2*(Size.border.window + Size.padding.button)
+    return TextBoxWidget:new{
+        text = text,
+        width = width,
+        face = Font:getFace("smallinfofont"),
+        alignment = "left",
+        line_height = 0.2,
+    }
+end
+
+function UIManager_Updates:showPluginChangelog(update)
+    if not update then
+        self:showInfo(_("No changelog available"))
+        return
+    end
+
+    local release = update.release or {}
+    local changelog = release.body
+    if not changelog or changelog:match("^%s*$") then
+        self:showInfo(_("No changelog available for this version."))
+        return
+    end
+
+    local plugin_name = update.installed_plugin.fullname or update.installed_plugin.name or _("Unknown plugin")
+    local version = release.version or release.tag_name or _("unknown")
+    local text_widget = self:_createChangelogWidget(changelog)
+
+    local dialog
+    dialog = ButtonDialog:new{
+        title = T(_("Changelog — %1 (%2)"), plugin_name, version),
+        _added_widgets = {
+            text_widget,
+        },
+        buttons = {
+            {
+                {
+                    text = _("Close"),
+                    callback = function()
+                        if dialog then
+                            dialog:onClose()
+                        end
+                    end,
+                },
+            },
+        },
+    }
+
+    UIManager:show(dialog)
+end
+
+function UIManager_Updates:_buildPluginUpdateRow(dialog, check_button, update)
+    local row = HorizontalGroup:new{
+        align = "top",
+    }
+    row.parent = dialog
+
+    local label_widget = TextWidget:new{
+        text = "changelog",
+        face = Font:getFace("xx_smallinfofont"),
+    }
+    local icon_button = IconButton:new{
+        icon = "notice-info",
+        width = Screen:scaleBySize(28),
+        height = Screen:scaleBySize(28),
+        padding = Size.padding.tiny,
+        callback = function()
+            self:showPluginChangelog(update)
+        end,
+        show_parent = dialog,
+    }
+
+    local action_group = HorizontalGroup:new{
+        align = "center",
+    }
+    table.insert(action_group, label_widget)
+    table.insert(action_group, HorizontalSpan:new{ width = Size.span.horizontal_small })
+    table.insert(action_group, icon_button)
+
+    local reserved = action_group:getSize().w + Size.span.horizontal_small
+    local available = dialog:getAddedWidgetAvailableWidth() - reserved
+    if available > 0 then
+        check_button.width = available
+        check_button:initCheckButton(check_button.checked)
+    end
+
+    table.insert(row, check_button)
+    table.insert(row, HorizontalSpan:new{ width = Size.span.horizontal_small })
+    table.insert(row, action_group)
+
+    return row
+end
 
 -- Show info message
 function UIManager_Updates:showInfo(text, timeout)
@@ -96,15 +256,18 @@ function UIManager_Updates:showUpdatesList(patch_updates, plugin_updates, callba
         local display_text = T(_("%1 (by %2)"), patch_name, author)
         
         table.insert(checks, {
-            text = display_text,
-            checked = true,
-            callback = function()
-                patch_update_states[i].selected = not patch_update_states[i].selected
-            end,
-            hold_callback = function()
-                -- Show patch details on long press
-                self:showPatchDetails(update)
-            end,
+            kind = "patch",
+            config = {
+                text = display_text,
+                checked = true,
+                callback = function()
+                    patch_update_states[i].selected = not patch_update_states[i].selected
+                end,
+                hold_callback = function()
+                    -- Show patch details on long press
+                    self:showPatchDetails(update)
+                end,
+            },
         })
     end
     
@@ -121,15 +284,19 @@ function UIManager_Updates:showUpdatesList(patch_updates, plugin_updates, callba
         local display_text = T(_("%1 (by %2)\n   %3 → %4"), plugin_name, author, current_version, new_version)
         
         table.insert(checks, {
-            text = display_text,
-            checked = true,
-            callback = function()
-                plugin_update_states[i].selected = not plugin_update_states[i].selected
-            end,
-            hold_callback = function()
-                -- Show plugin details on long press
-                self:showPluginDetails(update)
-            end,
+            kind = "plugin",
+            update = update,
+            config = {
+                text = display_text,
+                checked = true,
+                callback = function()
+                    plugin_update_states[i].selected = not plugin_update_states[i].selected
+                end,
+                hold_callback = function()
+                    -- Show plugin details on long press
+                    self:showPluginDetails(update)
+                end,
+            },
         })
     end
     
@@ -191,8 +358,13 @@ function UIManager_Updates:showUpdatesList(patch_updates, plugin_updates, callba
     
     -- Add checkboxes
     for _, check in ipairs(checks) do
-        check.parent = button_dialog
-        button_dialog:addWidget(CheckButton:new(check))
+        check.config.parent = button_dialog
+        local check_button = CheckButton:new(check.config)
+        if check.kind == "plugin" then
+            button_dialog:addWidget(self:_buildPluginUpdateRow(button_dialog, check_button, check.update))
+        else
+            button_dialog:addWidget(check_button)
+        end
     end
     
     UIManager:show(button_dialog)

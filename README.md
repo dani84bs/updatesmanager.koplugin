@@ -286,7 +286,8 @@ Patch descriptions are loaded in the following priority order:
 3. The plugin will check all configured plugin repositories for updates
 4. Select which plugins you want to update using checkboxes
 5. Long-press on any plugin to view detailed information (version, release notes)
-6. Click **Update Selected** to install updates
+6. Tap the small **changelog** label or icon next to a plugin to preview the release notes for that specific version without leaving KOReader
+7. Click **Update Selected** to install updates
 
 <a id="viewing-installed-plugins"></a>
 #### Viewing Installed Plugins

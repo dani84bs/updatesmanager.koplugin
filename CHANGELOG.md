@@ -1,5 +1,13 @@
 # Changelog
 
+# Changelog
+
+## [1.0.2] - 2025-11-17
+
+### Added
+- Added an inline **changelog** label and icon for every plugin update entry so users can open the release notes inside KOReader with markdown styling (bold headings, preserved lists, stripped links). ([#4](https://github.com/advokatb/updatesmanager.koplugin/issues/4))
+
+
 ## [1.0.1] - 2025-11-13
 
 ### Changed
